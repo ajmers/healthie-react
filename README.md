@@ -1,32 +1,22 @@
-# React + TypeScript + Vite
+# healthie-react
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A small kanban board (To Do / Doing / Done) built with React, Vite and the [Puck](https://puckeditor.com) drag-and-drop editor. Cards use characters from the Rick and Morty API.
 
-Currently, two official plugins are available:
+## Running locally
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+You need Node.js 20.19+ (or 22.12+) and npm.
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```sh
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Then open the URL Vite prints, usually http://localhost:5173.
+
+The board is saved in your browser's local storage, so it survives a refresh.
+
+## Other scripts
+
+- `npm run build` typechecks and builds for production into `dist/`
+- `npm run preview` serves the production build locally
+- `npm run lint` runs Oxlint
