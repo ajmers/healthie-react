@@ -243,3 +243,30 @@
     border-right-color: var(--border);
   }
 }
+
+.rocketship {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.rocketship-rocket {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  font-size: 72px;
+  /* the emoji points up and to the right; turn it to point straight up */
+  rotate: -45deg;
+  animation: rocketship-launch 1.8s ease-in forwards;
+}
+
+@keyframes rocketship-launch {
+  from {
+    translate: -50% 100%;
+  }
+  to {
+    translate: -50% calc(-100vh - 100%);
+  }
+}

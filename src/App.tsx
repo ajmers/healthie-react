@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect } from "react";
 import "./App.css";
 import { Puck, createUsePuck } from "@puckeditor/core";
 import type { Config, Data, Slot } from "@puckeditor/core";
+import Rocketship from "./components/Rocketship";
 import "@puckeditor/core/puck.css";
 
 function fetchCharacters() {
@@ -232,8 +233,7 @@ function App() {
   const [charactersById, setCharactersById] = useState<
     Record<string, Character>
   >(() => indexById(loadStored(CHARACTERS_KEY, [])));
-  console.log("Characters:", characters);
-  console.log("CharactersById:", charactersById);
+  const [launching, setLaunching] = useState(false);
   useEffect(() => {
     fetchCharacters().then((data) => {
       setCharacters(data.results);
@@ -248,7 +248,17 @@ function App() {
         config={config}
         data={board}
         iframe={{ enabled: false }}
+        onAction={(action) => {
+          if (
+            action.type === "move" &&
+            action.destinationZone === "root:done" &&
+            action.sourceZone !== action.destinationZone
+          ) {
+            setLaunching(true);
+          }
+        }}
         onChange={(data) => {
+          console.log("Data:", data)
           console.log("Board:", data.root.props);
           store(BOARD_KEY, data);
         }}
@@ -257,6 +267,7 @@ function App() {
         <NewItemForm characters={characters} />
         <Puck.Preview />
       </Puck>
+      {launching && <Rocketship onDone={() => setLaunching(false)} />}
     </CharactersContext.Provider>
   );
 }
