@@ -52,14 +52,7 @@ function Card(props: CardProps) {
   const characters = useContext(CharactersContext);
   const status = useContext(StatusContext);
   return (
-    <div
-      style={{
-        width: "60%",
-        margin: "10px",
-        padding: "10px",
-        border: "1px solid #ccc",
-      }}
-    >
+    <div className="card">
       <h4>{props.name}</h4>
       <img
         style={{ width: "80%" }}
@@ -120,15 +113,7 @@ function NewItemForm(props: { characters: Character[] }) {
     characterId: "",
   });
   return (
-    <form
-      style={{
-        width: "20%",
-        margin: "20px",
-        display: "flex",
-        gap: "10px",
-        flexDirection: "column",
-      }}
-    >
+    <form className="new-item-form">
       <input
         type="text"
         placeholder="New item"

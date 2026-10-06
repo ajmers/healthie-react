@@ -1,3 +1,70 @@
+.new-item-form {
+  width: 260px;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 20px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+
+  input,
+  select,
+  button {
+    font: inherit;
+    font-size: 15px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-h);
+    background: var(--bg);
+  }
+
+  input:focus-visible,
+  select:focus-visible,
+  button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  button {
+    cursor: pointer;
+    color: var(--accent);
+    background: var(--accent-bg);
+    border-color: transparent;
+    transition: border-color 0.2s;
+
+    &:hover {
+      border-color: var(--accent-border);
+    }
+  }
+}
+
+.card {
+  width: 60%;
+  margin: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+
+  h4 {
+    margin: 4px 0 8px;
+    color: var(--text-h);
+  }
+
+  img {
+    border-radius: 6px;
+  }
+
+  p {
+    margin: 6px 0 2px;
+    font-size: 14px;
+  }
+}
+
 .counter {
   font-size: 16px;
   padding: 5px 10px;
