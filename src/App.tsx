@@ -1,5 +1,8 @@
-import { useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
 import "./App.css";
+import { Puck, createUsePuck } from "@puckeditor/core";
+import type { Config, Data, Slot } from "@puckeditor/core";
+import "@puckeditor/core/puck.css";
 
 function fetchCharacters() {
   return fetch("https://rickandmortyapi.com/api/character").then((response) =>
@@ -25,21 +28,96 @@ type Character = {
   image: string;
 };
 
-type Item = {
+type CardProps = {
   name: string;
   characterId: string;
-  status: string;
 };
 
-function NewItemForm(props: {
-  characters: Character[];
-  items: Item[];
-  addItem: (items: Item[]) => void;
-}) {
-  const [formState, setState] = useState<Item>({
+type BoardProps = {
+  todo: Slot;
+  doing: Slot;
+  done: Slot;
+};
+
+const columns = [
+  { slot: "todo", id: "left", title: "To Do" },
+  { slot: "doing", id: "center", title: "Doing" },
+  { slot: "done", id: "right", title: "Done" },
+] as const;
+
+const CharactersContext = createContext<Record<string, Character>>({});
+const StatusContext = createContext("");
+
+function Card(props: CardProps) {
+  const characters = useContext(CharactersContext);
+  const status = useContext(StatusContext);
+  return (
+    <div
+      style={{
+        width: "60%",
+        margin: "10px",
+        padding: "10px",
+        border: "1px solid #ccc",
+      }}
+    >
+      <h4>{props.name}</h4>
+      <img
+        style={{ width: "80%" }}
+        src={characters[props.characterId]?.image}
+      />
+      <p>Status: {status}</p>
+    </div>
+  );
+}
+
+const config: Config<{ components: { Card: CardProps }; root: BoardProps }> = {
+  components: {
+    Card: {
+      fields: {
+        name: { type: "text" },
+        characterId: { type: "text" },
+      },
+      render: Card,
+    },
+  },
+  root: {
+    fields: {
+      todo: { type: "slot", allow: ["Card"] },
+      doing: { type: "slot", allow: ["Card"] },
+      done: { type: "slot", allow: ["Card"] },
+    },
+    render: (props) => (
+      <div style={{ display: "flex", flexDirection: "row" }}>
+        {columns.map((column) => {
+          const Cards = props[column.slot];
+          return (
+            <section
+              key={column.id}
+              id={column.id}
+              style={{ display: "flex", flex: 1, flexDirection: "column" }}
+            >
+              <h3 style={{ alignSelf: "begin" }}>{column.title}</h3>
+              <StatusContext.Provider value={column.title}>
+                <Cards
+                  style={{ display: "flex", flex: 1, flexDirection: "column" }}
+                  minEmptyHeight={200}
+                />
+              </StatusContext.Provider>
+            </section>
+          );
+        })}
+      </div>
+    ),
+  },
+};
+
+const usePuck = createUsePuck<typeof config>();
+
+function NewItemForm(props: { characters: Character[] }) {
+  const dispatch = usePuck((state) => state.dispatch);
+  const [formState, setState] = useState<CardProps>({
     name: "",
     characterId: "",
-    status: "To Do",
   });
   return (
     <form
@@ -74,7 +152,21 @@ function NewItemForm(props: {
       <button
         onClick={(e) => {
           e.preventDefault();
-          props.addItem([...props.items, formState]);
+          const card = {
+            type: "Card",
+            props: { ...formState, id: `Card-${crypto.randomUUID()}` },
+          };
+          dispatch({
+            type: "setData",
+            data: (data) => {
+              const board = data.root.props as Partial<BoardProps> | undefined;
+              const root = {
+                ...data.root,
+                props: { ...board, todo: [...(board?.todo ?? []), card] },
+              };
+              return { root: root as Data["root"] };
+            },
+          });
         }}
       >
         Add
@@ -83,25 +175,10 @@ function NewItemForm(props: {
   );
 }
 
-function Card(props: { item: Item; characters: Record<string, Character> }) {
-  return (
-    <div
-      style={{
-        width: "60%",
-        margin: "10px",
-        padding: "10px",
-        border: "1px solid #ccc",
-      }}
-    >
-      <h4>{props.item.name}</h4>
-      <img
-        style={{ width: "80%" }}
-        src={props.characters[props.item.characterId]?.image}
-      />
-      <p>Status: {props.item.status}</p>
-    </div>
-  );
-}
+const initialData = {
+  root: { props: { todo: [], doing: [], done: [] } },
+  content: [],
+};
 
 function App() {
   const [characters, setCharacters] = useState<Character[]>([]);
@@ -110,7 +187,6 @@ function App() {
   >({});
   console.log("Characters:", characters);
   console.log("CharactersById:", charactersById);
-  const [items, setItems] = useState<Item[]>([]);
   useEffect(() => {
     fetchCharacters().then((data) => {
       setCharacters(data.results);
@@ -121,51 +197,19 @@ function App() {
       );
     });
   }, []);
-  console.log("Items:", items);
 
   return (
-    <>
-      <NewItemForm characters={characters} items={items} addItem={setItems} />
-
-      <div style={{ display: "flex", flexDirection: "row" }}>
-        <section
-          id="left"
-          style={{ display: "flex", flex: 1, flexDirection: "column" }}
-        >
-          <h3 style={{ alignSelf: "begin" }}>To Do</h3>
-          {items
-            .filter((item) => item.status === "To Do")
-            .map((item, index) => (
-              <Card key={index} item={item} characters={charactersById} />
-            ))}
-        </section>
-
-        <section
-          id="center"
-          style={{ display: "flex", flex: 1, flexDirection: "column" }}
-        >
-          <h3 style={{ alignSelf: "begin" }}>Doing</h3>
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            {items
-              .filter((item) => item.status === "Doing")
-              .map((item, index) => (
-                <Card key={index} item={item} characters={charactersById} />
-              ))}
-          </div>
-        </section>
-        <section
-          id="right"
-          style={{ display: "flex", flex: 1, flexDirection: "column" }}
-        >
-          <h3 style={{ alignSelf: "begin" }}>Done</h3>
-        </section>
-        {items
-          .filter((item) => item.status === "Done")
-          .map((item, index) => (
-            <Card key={index} item={item} characters={charactersById} />
-          ))}
-      </div>
-    </>
+    <CharactersContext.Provider value={charactersById}>
+      <Puck
+        config={config}
+        data={initialData}
+        iframe={{ enabled: false }}
+        onChange={(data) => console.log("Board:", data.root.props)}
+      >
+        <NewItemForm characters={characters} />
+        <Puck.Preview />
+      </Puck>
+    </CharactersContext.Provider>
   );
 }
 
