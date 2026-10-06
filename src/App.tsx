@@ -31,6 +31,7 @@ type Character = {
 type CardProps = {
   name: string;
   characterId: string;
+  status: string;
 };
 
 type BoardProps = {
@@ -46,11 +47,9 @@ const columns = [
 ] as const;
 
 const CharactersContext = createContext<Record<string, Character>>({});
-const StatusContext = createContext("");
 
 function Card(props: CardProps) {
   const characters = useContext(CharactersContext);
-  const status = useContext(StatusContext);
   return (
     <div className="card">
       <h4>{props.name}</h4>
@@ -58,7 +57,7 @@ function Card(props: CardProps) {
         style={{ width: "80%" }}
         src={characters[props.characterId]?.image}
       />
-      <p>Status: {status}</p>
+      <p>Status: {props.status}</p>
     </div>
   );
 }
@@ -69,6 +68,7 @@ const config: Config<{ components: { Card: CardProps }; root: BoardProps }> = {
       fields: {
         name: { type: "text" },
         characterId: { type: "text" },
+        status: { type: "text" },
       },
       render: Card,
     },
@@ -90,12 +90,10 @@ const config: Config<{ components: { Card: CardProps }; root: BoardProps }> = {
               style={{ display: "flex", flex: 1, flexDirection: "column" }}
             >
               <h3 style={{ alignSelf: "begin" }}>{column.title}</h3>
-              <StatusContext.Provider value={column.title}>
-                <Cards
-                  style={{ display: "flex", flex: 1, flexDirection: "column" }}
-                  minEmptyHeight={200}
-                />
-              </StatusContext.Provider>
+              <Cards
+                style={{ display: "flex", flex: 1, flexDirection: "column" }}
+                minEmptyHeight={200}
+              />
             </section>
           );
         })}
@@ -106,14 +104,49 @@ const config: Config<{ components: { Card: CardProps }; root: BoardProps }> = {
 
 const usePuck = createUsePuck<typeof config>();
 
+// Keeps each card's status equal to the title of the column it sits in.
+function StatusSync() {
+  const dispatch = usePuck((state) => state.dispatch);
+  const board = usePuck((state) => state.appState.data.root.props) as
+    Partial<BoardProps> | undefined;
+  useEffect(() => {
+    const outOfSync = columns.some((column) =>
+      (board?.[column.slot] ?? []).some(
+        (card) => card.props.status !== column.title,
+      ),
+    );
+    if (!outOfSync) return;
+    dispatch({
+      type: "setData",
+      data: (data) => {
+        const current = data.root.props as Partial<BoardProps> | undefined;
+        const synced = Object.fromEntries(
+          columns.map((column) => [
+            column.slot,
+            (current?.[column.slot] ?? []).map((card) => ({
+              ...card,
+              props: { ...card.props, status: column.title },
+            })),
+          ]),
+        );
+        const root = { ...data.root, props: { ...current, ...synced } };
+        return { root: root as Data["root"] };
+      },
+    });
+  }, [board, dispatch]);
+  return null;
+}
+
 function NewItemForm(props: { characters: Character[] }) {
   const dispatch = usePuck((state) => state.dispatch);
   const [formState, setState] = useState<CardProps>({
     name: "",
     characterId: "",
+    status: "To Do",
   });
   return (
     <form className="new-item-form">
+      <h3>New item</h3>
       <input
         type="text"
         placeholder="New item"
@@ -165,21 +198,47 @@ const initialData = {
   content: [],
 };
 
+const BOARD_KEY = "healthie-react:board";
+const CHARACTERS_KEY = "healthie-react:characters";
+
+function loadStored<T>(key: string, fallback: T): T {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function store(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // storage unavailable or full; the app still works without it
+  }
+}
+
+function indexById(characters: Character[]) {
+  return Object.fromEntries(
+    characters.map((character) => [character.id, character]),
+  );
+}
+
 function App() {
-  const [characters, setCharacters] = useState<Character[]>([]);
+  const [board] = useState(() => loadStored(BOARD_KEY, initialData));
+  const [characters, setCharacters] = useState<Character[]>(() =>
+    loadStored(CHARACTERS_KEY, []),
+  );
   const [charactersById, setCharactersById] = useState<
     Record<string, Character>
-  >({});
+  >(() => indexById(loadStored(CHARACTERS_KEY, [])));
   console.log("Characters:", characters);
   console.log("CharactersById:", charactersById);
   useEffect(() => {
     fetchCharacters().then((data) => {
       setCharacters(data.results);
-      setCharactersById(
-        Object.fromEntries(
-          data.results.map((character: Character) => [character.id, character]),
-        ),
-      );
+      setCharactersById(indexById(data.results));
+      store(CHARACTERS_KEY, data.results);
     });
   }, []);
 
@@ -187,10 +246,14 @@ function App() {
     <CharactersContext.Provider value={charactersById}>
       <Puck
         config={config}
-        data={initialData}
+        data={board}
         iframe={{ enabled: false }}
-        onChange={(data) => console.log("Board:", data.root.props)}
+        onChange={(data) => {
+          console.log("Board:", data.root.props);
+          store(BOARD_KEY, data);
+        }}
       >
+        <StatusSync />
         <NewItemForm characters={characters} />
         <Puck.Preview />
       </Puck>
