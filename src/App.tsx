@@ -41,6 +41,45 @@ const columns = [
   { slot: "done", id: "right", title: "Done" },
 ] as const;
 
+type ColumnSlot = (typeof columns)[number]["slot"];
+
+type Position = { column: ColumnSlot; index: number };
+
+// The smallest record of a board edit that is enough to reverse it. A reorder
+// is a move whose from and to are in the same column.
+type Change =
+  | { type: "add"; cardId: string; column: ColumnSlot }
+  | { type: "move"; cardId: string; from: Position; to: Position };
+
+// Returns the board as it was before the given change was made.
+function revert(board: Partial<BoardProps>, change: Change) {
+  if (change.type === "add") {
+    return {
+      ...board,
+      [change.column]: (board[change.column] ?? []).filter(
+        (card) => card.props.id !== change.cardId,
+      ),
+    };
+  }
+  const moved = board[change.to.column] ?? [];
+  const index = moved.findIndex((card) => card.props.id === change.cardId);
+  if (index === -1) return board;
+  const without = { ...board, [change.to.column]: moved.toSpliced(index, 1) };
+  return {
+    ...without,
+    [change.from.column]: (without[change.from.column] ?? []).toSpliced(
+      change.from.index,
+      0,
+      moved[index],
+    ),
+  };
+}
+
+// Puck names each column's drop zone "root:<slot>".
+function columnOfZone(zone: string) {
+  return columns.find((column) => `root:${column.slot}` === zone)?.slot;
+}
+
 const CharactersContext = createContext<Record<string, Character>>({});
 
 function Card(props: CardProps) {
@@ -132,7 +171,36 @@ function StatusSync() {
   return null;
 }
 
-function NewItemForm(props: { characters: Character[] }) {
+function UndoButton(props: { changes: Change[]; onUndone: () => void }) {
+  const dispatch = usePuck((state) => state.dispatch);
+  const last = props.changes.at(-1);
+  return (
+    <button
+      type="button"
+      className="undo-button"
+      disabled={!last}
+      onClick={() => {
+        if (!last) return;
+        dispatch({
+          type: "setData",
+          data: (data) => {
+            const board = data.root.props as Partial<BoardProps> | undefined;
+            const root = { ...data.root, props: revert(board ?? {}, last) };
+            return { root: root as Data["root"] };
+          },
+        });
+        props.onUndone();
+      }}
+    >
+      Undo
+    </button>
+  );
+}
+
+function NewItemForm(props: {
+  characters: Character[];
+  onAdd: (change: Change) => void;
+}) {
   const dispatch = usePuck((state) => state.dispatch);
   const [formState, setState] = useState<CardProps>({
     name: "",
@@ -159,6 +227,7 @@ function NewItemForm(props: { characters: Character[] }) {
             return { root: root as Data["root"] };
           },
         });
+        props.onAdd({ type: "add", cardId: card.props.id, column: "todo" });
         setState({ ...formState, name: "", characterId: "" });
       }}
     >
@@ -232,6 +301,9 @@ function App() {
     Record<string, Character>
   >(() => indexById(loadStored(CHARACTERS_KEY, [])));
   const [launching, setLaunching] = useState(false);
+  // Undo stack: every add, move and reorder since the page loaded.
+  const [changes, setChanges] = useState<Change[]>([]);
+  const record = (change: Change) => setChanges((all) => [...all, change]);
   useEffect(() => {
     fetchCharacters().then((results) => {
       setCharacters(results);
@@ -246,14 +318,24 @@ function App() {
         config={config}
         data={board}
         iframe={{ enabled: false }}
-        onAction={(action) => {
+        onAction={(action, _state, previous) => {
+          if (action.type !== "move") return;
           if (
-            action.type === "move" &&
             action.destinationZone === "root:done" &&
             action.sourceZone !== action.destinationZone
           ) {
             setLaunching(true);
           }
+          const fromColumn = columnOfZone(action.sourceZone);
+          const toColumn = columnOfZone(action.destinationZone);
+          if (!fromColumn || !toColumn) return;
+          const from = { column: fromColumn, index: action.sourceIndex };
+          const to = { column: toColumn, index: action.destinationIndex };
+          if (from.column === to.column && from.index === to.index) return;
+          const board = previous.data.root.props as
+            Partial<BoardProps> | undefined;
+          const cardId = board?.[from.column]?.[from.index]?.props.id;
+          if (cardId) record({ type: "move", cardId, from, to });
         }}
         onChange={(data) => {
           console.log("Data:", data);
@@ -262,7 +344,11 @@ function App() {
         }}
       >
         <StatusSync />
-        <NewItemForm characters={characters} />
+        <NewItemForm characters={characters} onAdd={record} />
+        <UndoButton
+          changes={changes}
+          onUndone={() => setChanges((all) => all.slice(0, -1))}
+        />
         <Puck.Preview />
       </Puck>
       {launching && <Rocketship onDone={() => setLaunching(false)} />}
