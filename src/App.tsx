@@ -5,29 +5,23 @@ import type { Config, Data, Slot } from "@puckeditor/core";
 import Rocketship from "./components/Rocketship";
 import "@puckeditor/core/puck.css";
 
-function fetchCharacters() {
-  return fetch("https://rickandmortyapi.com/api/character").then((response) =>
-    response.json(),
-  );
-}
-
 type Character = {
-  id: number;
+  id: string;
   name: string;
-  status: string;
-  species: string;
-  type: string;
-  gender: string;
-  origin: {
-    name: string;
-    url: string;
-  };
-  location: {
-    name: string;
-    url: string;
-  };
   image: string;
 };
+
+function fetchCharacters(): Promise<Character[]> {
+  return fetch("https://rickandmortyapi.com/graphql", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      query: "{ characters { results { id name image } } }",
+    }),
+  })
+    .then((response) => response.json())
+    .then((json) => json.data.characters.results);
+}
 
 type CardProps = {
   name: string;
@@ -146,14 +140,39 @@ function NewItemForm(props: { characters: Character[] }) {
     status: "To Do",
   });
   return (
-    <form className="new-item-form">
+    <form
+      className="new-item-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const card = {
+          type: "Card",
+          props: { ...formState, id: `Card-${crypto.randomUUID()}` },
+        };
+        dispatch({
+          type: "setData",
+          data: (data) => {
+            const board = data.root.props as Partial<BoardProps> | undefined;
+            const root = {
+              ...data.root,
+              props: { ...board, todo: [...(board?.todo ?? []), card] },
+            };
+            return { root: root as Data["root"] };
+          },
+        });
+        setState({ ...formState, name: "", characterId: "" });
+      }}
+    >
       <h3>New item</h3>
       <input
         type="text"
         placeholder="New item"
+        required
+        value={formState.name}
         onChange={(e) => setState({ ...formState, name: e.target.value })}
       />
       <select
+        required
+        value={formState.characterId}
         onChange={(e) =>
           setState({ ...formState, characterId: e.target.value })
         }
@@ -168,28 +187,7 @@ function NewItemForm(props: { characters: Character[] }) {
           </option>
         ))}
       </select>
-      <button
-        onClick={(e) => {
-          e.preventDefault();
-          const card = {
-            type: "Card",
-            props: { ...formState, id: `Card-${crypto.randomUUID()}` },
-          };
-          dispatch({
-            type: "setData",
-            data: (data) => {
-              const board = data.root.props as Partial<BoardProps> | undefined;
-              const root = {
-                ...data.root,
-                props: { ...board, todo: [...(board?.todo ?? []), card] },
-              };
-              return { root: root as Data["root"] };
-            },
-          });
-        }}
-      >
-        Add
-      </button>
+      <button type="submit">Add</button>
     </form>
   );
 }
@@ -235,10 +233,10 @@ function App() {
   >(() => indexById(loadStored(CHARACTERS_KEY, [])));
   const [launching, setLaunching] = useState(false);
   useEffect(() => {
-    fetchCharacters().then((data) => {
-      setCharacters(data.results);
-      setCharactersById(indexById(data.results));
-      store(CHARACTERS_KEY, data.results);
+    fetchCharacters().then((results) => {
+      setCharacters(results);
+      setCharactersById(indexById(results));
+      store(CHARACTERS_KEY, results);
     });
   }, []);
 
@@ -258,7 +256,7 @@ function App() {
           }
         }}
         onChange={(data) => {
-          console.log("Data:", data)
+          console.log("Data:", data);
           console.log("Board:", data.root.props);
           store(BOARD_KEY, data);
         }}
