@@ -50,9 +50,29 @@
   }
 }
 
+.board {
+  display: flex;
+  flex-direction: row;
+}
+
+.column {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.column-cards {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 200px;
+}
+
 .card {
   width: 60%;
   margin: 10px;
+  cursor: grab;
+  touch-action: none;
   padding: 10px;
   border: 1px solid var(--border);
   border-radius: 8px;

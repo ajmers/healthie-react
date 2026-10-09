@@ -1,15 +1,27 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
-import { Puck, createUsePuck } from "@puckeditor/core";
-import type { Config, Data, Slot } from "@puckeditor/core";
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  closestCorners,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import type {
+  DragEndEvent,
+  DragOverEvent,
+  DragStartEvent,
+  UniqueIdentifier,
+} from "@dnd-kit/core";
+import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { Card } from "./components/Card";
+import Column from "./components/Column";
+import NewItemForm from "./components/NewItemForm";
 import Rocketship from "./components/Rocketship";
-import "@puckeditor/core/puck.css";
-
-type Character = {
-  id: string;
-  name: string;
-  image: string;
-};
+import { columns } from "./types";
+import type { Board, Character, ColumnId } from "./types";
 
 function fetchCharacters(): Promise<Character[]> {
   return fetch("https://rickandmortyapi.com/graphql", {
@@ -23,181 +35,9 @@ function fetchCharacters(): Promise<Character[]> {
     .then((json) => json.data.characters.results);
 }
 
-type CardProps = {
-  name: string;
-  characterId: string;
-  status: string;
-};
+const emptyBoard: Board = { todo: [], doing: [], done: [] };
 
-type BoardProps = {
-  todo: Slot;
-  doing: Slot;
-  done: Slot;
-};
-
-const columns = [
-  { slot: "todo", id: "left", title: "To Do" },
-  { slot: "doing", id: "center", title: "Doing" },
-  { slot: "done", id: "right", title: "Done" },
-] as const;
-
-const CharactersContext = createContext<Record<string, Character>>({});
-
-function Card(props: CardProps) {
-  const characters = useContext(CharactersContext);
-  return (
-    <div className="card">
-      <h4>{props.name}</h4>
-      <img
-        style={{ width: "80%" }}
-        src={characters[props.characterId]?.image}
-      />
-      <p>Status: {props.status}</p>
-    </div>
-  );
-}
-
-const config: Config<{ components: { Card: CardProps }; root: BoardProps }> = {
-  components: {
-    Card: {
-      fields: {
-        name: { type: "text" },
-        characterId: { type: "text" },
-        status: { type: "text" },
-      },
-      render: Card,
-    },
-  },
-  root: {
-    fields: {
-      todo: { type: "slot", allow: ["Card"] },
-      doing: { type: "slot", allow: ["Card"] },
-      done: { type: "slot", allow: ["Card"] },
-    },
-    render: (props) => (
-      <div style={{ display: "flex", flexDirection: "row" }}>
-        {columns.map((column) => {
-          const Cards = props[column.slot];
-          return (
-            <section
-              key={column.id}
-              id={column.id}
-              style={{ display: "flex", flex: 1, flexDirection: "column" }}
-            >
-              <h3 style={{ alignSelf: "begin" }}>{column.title}</h3>
-              <Cards
-                style={{ display: "flex", flex: 1, flexDirection: "column" }}
-                minEmptyHeight={200}
-              />
-            </section>
-          );
-        })}
-      </div>
-    ),
-  },
-};
-
-const usePuck = createUsePuck<typeof config>();
-
-// Keeps each card's status equal to the title of the column it sits in.
-function StatusSync() {
-  const dispatch = usePuck((state) => state.dispatch);
-  const board = usePuck((state) => state.appState.data.root.props) as
-    Partial<BoardProps> | undefined;
-  useEffect(() => {
-    const outOfSync = columns.some((column) =>
-      (board?.[column.slot] ?? []).some(
-        (card) => card.props.status !== column.title,
-      ),
-    );
-    if (!outOfSync) return;
-    dispatch({
-      type: "setData",
-      data: (data) => {
-        const current = data.root.props as Partial<BoardProps> | undefined;
-        const synced = Object.fromEntries(
-          columns.map((column) => [
-            column.slot,
-            (current?.[column.slot] ?? []).map((card) => ({
-              ...card,
-              props: { ...card.props, status: column.title },
-            })),
-          ]),
-        );
-        const root = { ...data.root, props: { ...current, ...synced } };
-        return { root: root as Data["root"] };
-      },
-    });
-  }, [board, dispatch]);
-  return null;
-}
-
-function NewItemForm(props: { characters: Character[] }) {
-  const dispatch = usePuck((state) => state.dispatch);
-  const [formState, setState] = useState<CardProps>({
-    name: "",
-    characterId: "",
-    status: "To Do",
-  });
-  return (
-    <form
-      className="new-item-form"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const card = {
-          type: "Card",
-          props: { ...formState, id: `Card-${crypto.randomUUID()}` },
-        };
-        dispatch({
-          type: "setData",
-          data: (data) => {
-            const board = data.root.props as Partial<BoardProps> | undefined;
-            const root = {
-              ...data.root,
-              props: { ...board, todo: [...(board?.todo ?? []), card] },
-            };
-            return { root: root as Data["root"] };
-          },
-        });
-        setState({ ...formState, name: "", characterId: "" });
-      }}
-    >
-      <h3>New item</h3>
-      <input
-        type="text"
-        placeholder="New item"
-        required
-        value={formState.name}
-        onChange={(e) => setState({ ...formState, name: e.target.value })}
-      />
-      <select
-        required
-        value={formState.characterId}
-        onChange={(e) =>
-          setState({ ...formState, characterId: e.target.value })
-        }
-      >
-        <option value="" key={0}>
-          Select a character
-        </option>
-
-        {props.characters.map((character) => (
-          <option key={character.id} value={character.id}>
-            {character.name}
-          </option>
-        ))}
-      </select>
-      <button type="submit">Add</button>
-    </form>
-  );
-}
-
-const initialData = {
-  root: { props: { todo: [], doing: [], done: [] } },
-  content: [],
-};
-
-const BOARD_KEY = "healthie-react:board";
+const BOARD_KEY = "healthie-react:board-v2";
 const CHARACTERS_KEY = "healthie-react:characters";
 
 function loadStored<T>(key: string, fallback: T): T {
@@ -217,56 +57,145 @@ function store(key: string, value: unknown) {
   }
 }
 
-function indexById(characters: Character[]) {
+function indexById(characters: Character[]): Record<string, Character> {
   return Object.fromEntries(
     characters.map((character) => [character.id, character]),
   );
 }
 
+// A drag id is either a column's id or the id of an item inside a column.
+function findColumn(board: Board, id: UniqueIdentifier): ColumnId | undefined {
+  return columns.find(
+    (column) =>
+      column.id === id || board[column.id].some((item) => item.id === id),
+  )?.id;
+}
+
 function App() {
-  const [board] = useState(() => loadStored(BOARD_KEY, initialData));
+  const [board, setBoard] = useState<Board>(() =>
+    loadStored(BOARD_KEY, emptyBoard),
+  );
   const [characters, setCharacters] = useState<Character[]>(() =>
     loadStored(CHARACTERS_KEY, []),
   );
-  const [charactersById, setCharactersById] = useState<
-    Record<string, Character>
-  >(() => indexById(loadStored(CHARACTERS_KEY, [])));
+  const charactersById = useMemo(() => indexById(characters), [characters]);
+  const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
   const [launching, setLaunching] = useState(false);
+  // The board as it was when the current drag began.
+  const boardBeforeDrag = useRef(board);
+
   useEffect(() => {
     fetchCharacters().then((results) => {
       setCharacters(results);
-      setCharactersById(indexById(results));
       store(CHARACTERS_KEY, results);
     });
   }, []);
 
+  useEffect(() => {
+    store(BOARD_KEY, board);
+  }, [board]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  function handleDragStart({ active }: DragStartEvent) {
+    boardBeforeDrag.current = board;
+    setActiveId(active.id);
+  }
+
+  // Moves the dragged item into another column as soon as it hovers over it.
+  function handleDragOver({ active, over }: DragOverEvent) {
+    if (!over) return;
+    setBoard((board) => {
+      const from = findColumn(board, active.id);
+      const to = findColumn(board, over.id);
+      const item = from && board[from].find((item) => item.id === active.id);
+      if (!from || !to || !item || from === to) return board;
+      const overIndex = board[to].findIndex((item) => item.id === over.id);
+      const index = overIndex === -1 ? board[to].length : overIndex;
+      return {
+        ...board,
+        [from]: board[from].filter((item) => item.id !== active.id),
+        [to]: [...board[to].slice(0, index), item, ...board[to].slice(index)],
+      };
+    });
+  }
+
+  // Reorders within the column, which handleDragOver has already settled.
+  function handleDragEnd({ active, over }: DragEndEvent) {
+    setActiveId(null);
+    const column = findColumn(board, active.id);
+    if (!column) return;
+    if (over && findColumn(board, over.id) === column) {
+      const oldIndex = board[column].findIndex((item) => item.id === active.id);
+      const newIndex = board[column].findIndex((item) => item.id === over.id);
+      if (newIndex !== -1 && oldIndex !== newIndex) {
+        setBoard({
+          ...board,
+          [column]: arrayMove(board[column], oldIndex, newIndex),
+        });
+      }
+    }
+    if (
+      column === "done" &&
+      findColumn(boardBeforeDrag.current, active.id) !== "done"
+    ) {
+      setLaunching(true);
+    }
+  }
+
+  function handleDragCancel() {
+    setActiveId(null);
+    setBoard(boardBeforeDrag.current);
+  }
+
+  const activeColumn = columns.find(
+    (column) => activeId !== null && column.id === findColumn(board, activeId),
+  );
+  const activeItem =
+    activeColumn && board[activeColumn.id].find((item) => item.id === activeId);
+
   return (
-    <CharactersContext.Provider value={charactersById}>
-      <Puck
-        config={config}
-        data={board}
-        iframe={{ enabled: false }}
-        onAction={(action) => {
-          if (
-            action.type === "move" &&
-            action.destinationZone === "root:done" &&
-            action.sourceZone !== action.destinationZone
-          ) {
-            setLaunching(true);
-          }
-        }}
-        onChange={(data) => {
-          console.log("Data:", data);
-          console.log("Board:", data.root.props);
-          store(BOARD_KEY, data);
-        }}
+    <>
+      <NewItemForm
+        characters={characters}
+        onAdd={(item) => setBoard({ ...board, todo: [...board.todo, item] })}
+      />
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
       >
-        <StatusSync />
-        <NewItemForm characters={characters} />
-        <Puck.Preview />
-      </Puck>
+        <div className="board">
+          {columns.map((column) => (
+            <Column
+              key={column.id}
+              id={column.id}
+              title={column.title}
+              items={board[column.id]}
+              charactersById={charactersById}
+            />
+          ))}
+        </div>
+        <DragOverlay>
+          {activeItem && (
+            <Card
+              item={activeItem}
+              character={charactersById[activeItem.characterId]}
+              status={activeColumn.title}
+            />
+          )}
+        </DragOverlay>
+      </DndContext>
       {launching && <Rocketship onDone={() => setLaunching(false)} />}
-    </CharactersContext.Provider>
+    </>
   );
 }
 

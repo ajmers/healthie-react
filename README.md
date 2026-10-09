@@ -1,6 +1,6 @@
 # healthie-react
 
-A small kanban board (To Do / Doing / Done) built with React, Vite and the [Puck](https://puckeditor.com) drag-and-drop editor. Cards use characters from the Rick and Morty API.
+A small kanban board (To Do / Doing / Done) built with React, Vite and [dnd kit](https://dndkit.com) for drag and drop. Cards use characters from the Rick and Morty API.
 
 ## Running locally
 
